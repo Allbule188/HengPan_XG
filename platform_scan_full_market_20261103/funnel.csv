@@ -1,0 +1,4 @@
+﻿config,universe,insufficient,price_any,box_any,volume_any,max_box,low,rapid,final,explained,errors
+strict_page_volume,5389,189,253,213,8,8,2093,5100,2,2,0
+mid_volume_08,5389,189,253,213,87,87,2093,5100,15,15,0
+relaxed_volume_09,5389,189,253,213,134,134,2093,5100,26,26,0

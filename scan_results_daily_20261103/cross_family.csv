@@ -1,0 +1,8 @@
+﻿code,name,market,close,rules,families,fam,rule_ids,min_range,min_body,min_full
+001213,中铁特货,SZ,3.54,8,3,amp、fixed、ma,amp_1.0_80、amp_1.2_80、fixed_10_40、fixed_6_40、fixed_8_40、ma_1.5_30、ma_1_30、ma_1_50_er0.3,6.194690265486724,0,0
+601880,辽港股份,SH,1.48,7,3,fixed、ma、tolerant,fixed_10_40、fixed_6_40、fixed_8_40、ma_1.5_30、ma_1_30、ma_1_50_er0.3、tol_4_40,7.0921985815602895,0,0
+600694,大商股份,SH,14.86,6,3,amp、fixed、ma,amp_0.8_80、amp_1.0_80、amp_1.2_80、fixed_10_40、ma_1.5_30、ma_1_30,9.928571428571432,0,0
+000541,佛山照明,SZ,4.99,6,3,amp、fixed、ma,amp_0.8_80、amp_1.0_80、amp_1.2_80、fixed_10_40、fixed_8_40、ma_1.5_30,11.344537815126053,0,0
+688459,哈铁科技,SH,7.84,5,3,amp、fixed、ma,amp_0.8_80、amp_1.0_80、amp_1.2_80、fixed_10_40、ma_1.5_30,10.026385224274405,0,0
+600062,华润双鹤,SH,16.09,5,3,boll、fixed、ma,boll_30、fixed_10_40、fixed_8_40、ma_1.5_30、ma_1_30,10.844976713240191,0,0
+688739,成大生物,SH,20.78,3,3,boll、fixed、ma,boll_30、fixed_10_40、ma_1.5_30,9.47745901639345,0,0

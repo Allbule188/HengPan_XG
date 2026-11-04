@@ -1,0 +1,446 @@
+diff --git a/api/analyzers/box_detector.py b/api/analyzers/box_detector.py
+index d835514..f894ee3 100644
+--- a/api/analyzers/box_detector.py
++++ b/api/analyzers/box_detector.py
+@@ -138,7 +138,7 @@ def identify_support_resistance(df: pd.DataFrame, window: int,
+                            height_factor * 0.15)
+ 
+             # Determine if this is a box pattern based on quality score
+-            is_box_pattern = box_quality >= 0.6  # Threshold for box pattern
++            is_box_pattern = True  # Structural evidence; the caller applies its quality threshold.
+ 
+     return {
+         "status": "analyzed",
+@@ -147,7 +147,7 @@ def identify_support_resistance(df: pd.DataFrame, window: int,
+         "support_strength": support_strength,
+         "resistance_strength": resistance_strength,
+         "is_box_pattern": is_box_pattern,
+-        "box_quality": round(box_quality, 2) if not np.isnan(box_quality) else 0.0
++        "box_quality": float(box_quality) if not np.isnan(box_quality) else 0.0
+     }
+ 
+ 
+@@ -291,15 +291,17 @@ def check_box_pattern(df: pd.DataFrame, window: int,
+ 
+     # Check if it's a valid box pattern
+     is_box = (
+-        analysis.get("is_box_pattern", False) and
++        bool(analysis.get("support_levels")) and bool(analysis.get("resistance_levels")) and
+         analysis.get("box_quality", 0) >= box_quality_threshold and
+         (analysis.get("volatility", float('inf')) <=
+          volatility_threshold if analysis.get("volatility") is not None else False)
+     )
+ 
++    analysis["is_box_pattern"] = bool(is_box)
++
+     # Add status message
+     if not is_box:
+-        if not analysis.get("is_box_pattern", False):
++        if not analysis.get("support_levels") or not analysis.get("resistance_levels"):
+             analysis["status"] = "不是箱体形态"
+         elif analysis.get("box_quality", 0) < box_quality_threshold:
+             analysis["status"] = "箱体质量不足"
+diff --git a/api/analyzers/combined_analyzer.py b/api/analyzers/combined_analyzer.py
+index 9265bf4..781734d 100644
+--- a/api/analyzers/combined_analyzer.py
++++ b/api/analyzers/combined_analyzer.py
+@@ -56,14 +56,14 @@ def analyze_stock(df: pd.DataFrame,
+         use_window_weights: Whether to use window weights for scoring
+         window_weights: Dictionary mapping window sizes to weights
+         use_low_position: Whether to use low position analysis
+-        high_point_lookback_days: Number of days to look back for finding the high point
+-        decline_period_days: Number of days within which the decline should have occurred
++        high_point_lookback_days: Number of K-line bars to look back (legacy parameter name)
++        decline_period_days: Maximum elapsed calendar days for the decline
+         decline_threshold: Minimum decline percentage from high to be considered at low position
+         use_rapid_decline_detection: Whether to use rapid decline detection
+-        rapid_decline_days: Number of days to define a rapid decline period
++        rapid_decline_days: Number of K-line bars in a rapid decline window (legacy name)
+         rapid_decline_threshold: Minimum decline percentage within rapid_decline_days to be considered rapid
+         use_breakthrough_confirmation: Whether to use breakthrough confirmation analysis
+-        breakthrough_confirmation_days: Number of days to look for confirmation
++        breakthrough_confirmation_days: Number of K-line bars to look for confirmation (legacy name)
+         use_box_detection: Whether to use box pattern detection
+         box_quality_threshold: Minimum quality score for a valid box pattern
+ 
+@@ -213,7 +213,7 @@ def analyze_stock(df: pd.DataFrame,
+                 volume_details = volume_analysis["consolidation_details"] if use_volume_analysis else {
+                     "status": "未分析"}
+ 
+-                reason = f"{window}日平台期: 价格区间{price_details.get('box_range', 'N/A'):.2f}, "
++                reason = f"{window}根K线平台期: 价格区间{price_details.get('box_range', 'N/A'):.2f}, "
+                 reason += f"均线收敛{price_details.get('ma_diff', 'N/A'):.2f}, "
+                 reason += f"波动率{price_details.get('volatility', 'N/A'):.2f}"
+ 
+@@ -253,19 +253,15 @@ def analyze_stock(df: pd.DataFrame,
+     # 添加箱体检测结果
+     box_analysis_results = {}
+     if use_box_detection:
+-        # 使用最大窗口进行箱体检测，以获取更稳定的支撑位和阻力位
+-        max_window = max(windows) if windows else 90
+-        box_analysis = analyze_box_pattern(df, max_window)
+-        box_analysis_results = box_analysis
+-
+-        # 如果启用了箱体检测，还需要满足箱体条件
+-        is_box_pattern = box_analysis.get("is_box_pattern", False)
+-        is_platform = is_platform and is_box_pattern
+-        platform_judgment_log.append(f"箱体检测: {is_box_pattern}")
++        # Per-window enhanced checks already applied the requested threshold.
++        # Chart annotations use a passing window and never veto its eligibility.
++        if platform_windows:
++            representative = max(platform_windows)
++            box_analysis_results = details.get(representative, {}).get("box_analysis", {})
+ 
+     # 记录最终判断结果
+     platform_judgment_log.append(f"最终平台期判断: {is_platform}")
+-    print(f"平台期判断过程: {' -> '.join(platform_judgment_log)}")
++
+ 
+     # 重新计算标准模式（低位+快速下跌后形成平台期）
+     has_decline_pattern = False
+@@ -282,10 +278,10 @@ def analyze_stock(df: pd.DataFrame,
+ 
+     # 如果启用了低位分析，添加高点标记
+     if use_low_position and position_result and "details" in position_result:
+-        details = position_result["details"]
+-        if "high_date" in details:
++        position_details = position_result["details"]
++        if "high_date" in position_details:
+             # 将Timestamp转换为字符串
+-            high_date = str(details["high_date"]).split()[0]  # 只保留日期部分
++            high_date = str(position_details["high_date"]).split()[0]  # 只保留日期部分
+             mark_lines.append({
+                 "date": high_date,
+                 "text": "高点",
+@@ -294,19 +290,19 @@ def analyze_stock(df: pd.DataFrame,
+ 
+     # 如果启用了快速下跌检测，添加快速下跌开始和结束标记
+     if use_rapid_decline_detection and decline_result and "details" in decline_result:
+-        details = decline_result["details"]
+-        if "rapid_decline_start_date" in details:
++        decline_details = decline_result["details"]
++        if "rapid_decline_start_date" in decline_details:
+             # 将Timestamp转换为字符串
+-            start_date = str(details["rapid_decline_start_date"]).split()[
++            start_date = str(decline_details["rapid_decline_start_date"]).split()[
+                 0]  # 只保留日期部分
+             mark_lines.append({
+                 "date": start_date,
+                 "text": "开始下跌",
+                 "color": "#ec0000"  # 红色
+             })
+-        if "rapid_decline_end_date" in details:
++        if "rapid_decline_end_date" in decline_details:
+             # 将Timestamp转换为字符串
+-            end_date = str(details["rapid_decline_end_date"]).split()[
++            end_date = str(decline_details["rapid_decline_end_date"]).split()[
+                 0]  # 只保留日期部分
+             mark_lines.append({
+                 "date": end_date,
+@@ -453,7 +449,7 @@ def analyze_stock(df: pd.DataFrame,
+ 
+         # Add breakthrough confirmation as a selection reason if applicable
+         if confirmation_result["has_confirmation"]:
+-            confirmation_reason = f"突破已确认: 突破日期{confirmation_result['details']['breakthrough_date']}, 确认天数{confirmation_result['details']['confirmation_days']}"
++            confirmation_reason = f"突破已确认: 突破日期{confirmation_result['details']['breakthrough_date']}, 确认根数{confirmation_result['details']['confirmation_days']}"
+ 
+             # 不再使用非整数键，而是将信息添加到所有平台期窗口
+             # Add to all platform windows
+diff --git a/api/analyzers/decline_analyzer.py b/api/analyzers/decline_analyzer.py
+index 3c3a68e..55c197b 100644
+--- a/api/analyzers/decline_analyzer.py
++++ b/api/analyzers/decline_analyzer.py
+@@ -24,29 +24,29 @@ def analyze_decline_speed(df: pd.DataFrame,
+ 
+     Args:
+         df: DataFrame containing stock price data
+-        lookback_days: Number of days to look back for finding the high point
+-        decline_period_days: Number of days within which the decline should have occurred
++        lookback_days: Number of K-line bars to look back (legacy parameter name)
++        decline_period_days: Maximum elapsed calendar days for the decline
+         decline_threshold: Minimum decline percentage from high to be considered at low position
+-        rapid_decline_days: Number of days to define a rapid decline
++        rapid_decline_days: Number of K-line bars in a rapid decline window (legacy name)
+         rapid_decline_threshold: Minimum decline percentage within rapid_decline_days to be considered rapid
+ 
+     Returns:
+         Dict containing decline analysis results
+     """
+     try:
+-        if len(df) < 60:  # Require at least 60 days of data
++        if len(df) < max(60, lookback_days):  # Require at least 60 days of data
+             return {
+                 "status": "insufficient_data",
+                 "is_low_position": False,
+                 "is_rapid_decline": False,
+                 "details": {
+                     "data_points": len(df),
+-                    "required_points": 60
++                    "required_points": max(60, lookback_days)
+                 }
+             }
+ 
+         # Sort DataFrame by date
+-        df = df.sort_values('date')
++        df = df.sort_values('date').reset_index(drop=True)
+ 
+         # Calculate lookback period
+         if len(df) <= lookback_days:
+@@ -88,7 +88,7 @@ def analyze_decline_speed(df: pd.DataFrame,
+         if decline_period_days > 0:
+             high_date = pd.to_datetime(max_date)
+             low_date = pd.to_datetime(min_date)
+-            days_between = (low_date - high_date).days
++            days_between = (low_date - high_date).total_seconds() / 86400
+             decline_period_satisfied = days_between <= decline_period_days
+ 
+         # Determine if it's a low position
+@@ -139,8 +139,8 @@ def analyze_decline_speed(df: pd.DataFrame,
+                 "low_price": float(min_price),
+                 "low_date": min_date,
+                 "decline_percentage": float(decline_percentage),
+-                "decline_days": int(decline_days),
+-                "daily_decline_rate": float(daily_decline_rate),
++                "decline_bars": int(decline_days),
++                "decline_rate_per_bar": float(daily_decline_rate),
+                 "max_rapid_decline": float(max_rapid_decline),
+                 "rapid_decline_start_date": rapid_decline_start_date,
+                 "rapid_decline_end_date": rapid_decline_end_date,
+@@ -175,10 +175,10 @@ def check_decline_pattern(df: pd.DataFrame,
+ 
+     Args:
+         df: DataFrame containing stock price data
+-        lookback_days: Number of days to look back for finding the high point
+-        decline_period_days: Number of days within which the decline should have occurred
++        lookback_days: Number of K-line bars to look back (legacy parameter name)
++        decline_period_days: Maximum elapsed calendar days for the decline
+         decline_threshold: Minimum decline percentage from high to be considered at low position
+-        rapid_decline_days: Number of days to define a rapid decline
++        rapid_decline_days: Number of K-line bars in a rapid decline window (legacy name)
+         rapid_decline_threshold: Minimum decline percentage within rapid_decline_days to be considered rapid
+ 
+     Returns:
+diff --git a/api/analyzers/enhanced_platform_analyzer.py b/api/analyzers/enhanced_platform_analyzer.py
+index ad56884..8ae7fa1 100644
+--- a/api/analyzers/enhanced_platform_analyzer.py
++++ b/api/analyzers/enhanced_platform_analyzer.py
+@@ -162,7 +162,7 @@ def analyze_enhanced_platform(df: pd.DataFrame,
+ 
+             # Create selection reason string
+             reason_parts = []
+-            reason_parts.append(f"{window}日平台期")
++            reason_parts.append(f"{window}根K线平台期")
+ 
+             if 'box_range' in window_details:
+                 reason_parts.append(f"价格区间{window_details['box_range']:.2f}")
+diff --git a/api/analyzers/position_analyzer.py b/api/analyzers/position_analyzer.py
+index 1a2009c..be4c4cf 100644
+--- a/api/analyzers/position_analyzer.py
++++ b/api/analyzers/position_analyzer.py
+@@ -14,21 +14,21 @@ def analyze_position(df: pd.DataFrame,
+     
+     Args:
+         df: DataFrame containing stock price data
+-        high_point_lookback_days: Number of days to look back for finding the high point
+-        decline_period_days: Number of days within which the decline should have occurred
++        high_point_lookback_days: Number of K-line bars to look back (legacy parameter name)
++        decline_period_days: Maximum elapsed calendar days for the decline
+         decline_threshold: Minimum decline percentage from high to be considered at low position (0.5 = 50%)
+     
+     Returns:
+         Dict containing position analysis results
+     """
+-    if df.empty or len(df) < 30:  # Require at least 30 days of data
++    if df.empty or len(df) < max(30, high_point_lookback_days):  # Require at least 30 days of data
+         return {
+             "is_low_position": False,
+             "details": {"status": "数据不足"}
+         }
+     
+     # Sort by date to ensure chronological order
+-    df = df.sort_values('date')
++    df = df.sort_values('date').reset_index(drop=True)
+     
+     # Get current price (most recent close)
+     current_price = df['close'].iloc[-1]
+@@ -51,16 +51,8 @@ def analyze_position(df: pd.DataFrame,
+     decline_pct = (historical_high - current_price) / historical_high
+     
+     # Check if the high point occurred within the decline period
+-    # First find the index in the original dataframe
+-    high_index = df[df['date'] == high_date].index
+-    if len(high_index) > 0:
+-        high_index = high_index[0]
+-        current_index = df.index[-1]
+-        days_since_high = len(df.loc[high_index:])  # Count actual data points between high and now
+-    else:
+-        # Fallback calculation
+-        days_since_high = len(lookback_df) - lookback_df['high'].argmax()
+-    
++    days_since_high = (pd.to_datetime(df['date'].iloc[-1]) - pd.to_datetime(high_date)).total_seconds() / 86400
++
+     # Determine if the stock is at a low position
+     is_low_position = (decline_pct >= decline_threshold) and (days_since_high <= decline_period_days)
+     
+diff --git a/api/platform_scanner.py b/api/platform_scanner.py
+index d2682d0..8d7bfb2 100644
+--- a/api/platform_scanner.py
++++ b/api/platform_scanner.py
+@@ -5,12 +5,14 @@ import pandas as pd
+ import numpy as np
+ from typing import List, Dict, Any, Optional, Tuple
+ import time
++from pathlib import Path
+ from datetime import datetime, timedelta
+ from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, ThreadPoolExecutor, wait
+ from tqdm import tqdm
+ from colorama import Fore, Style
+ 
+ from .data_fetcher import fetch_kline_data, baostock_login
++from .data_quality import prepare_scan_frame
+ from .industry_filter import apply_industry_diversity_filter
+ from .config import ScanConfig
+ 
+@@ -51,7 +53,11 @@ class _ScanExecutorContext:
+ 
+     def __exit__(self, exc_type, exc_val, exc_tb):
+         cancelled = bool(getattr(self.executor, "_scan_cancelled", False))
+-        self.executor.shutdown(wait=not cancelled, cancel_futures=cancelled)
++        if cancelled or exc_type is not None:
++            from .process_pool import close_process_pool
++            close_process_pool(self.executor, force=True)
++        else:
++            self.executor.shutdown(wait=True, cancel_futures=False)
+         return False
+ 
+ 
+@@ -76,7 +82,7 @@ def _iter_bounded_futures(executor, stock_list, submit, should_cancel,
+             if should_cancel and should_cancel():
+                 cancelled = True
+                 break
+-            completed, _ = wait(tuple(pending), return_when=FIRST_COMPLETED)
++            completed, _ = wait(tuple(pending), timeout=0.2, return_when=FIRST_COMPLETED)
+             for future in completed:
+                 stock = pending.pop(future)
+                 yield future, stock
+@@ -189,10 +195,35 @@ def scan_stocks(stock_list: List[Dict[str, Any]],
+         raise ValueError("local platform scans require 60-minute data")
+     # Calculate date range. A trading day contains about four 60-minute bars;
+     # include a generous weekend/holiday buffer so a 100-bar request has data.
++    if end_date is None and not use_local:
++        from .hengpan.fetcher import resolve_scan_date
++        end_date = resolve_scan_date(frequency=frequency,
++                                     probe_codes=[stock["code"] for stock in stock_list])
+     end_date = end_date or datetime.now().strftime('%Y-%m-%d')
+     end_day = datetime.strptime(end_date, '%Y-%m-%d')
+-    # Use the maximum window size plus some buffer for the start date
+-    max_window = max(config.windows) if config.windows else 90
++    # Include every enabled row-based history requirement in the fetch range.
++    required_history = config.high_point_lookback_days if config.use_low_position else 0
++    if config.use_breakthrough_confirmation:
++        required_history = max(required_history, config.breakthrough_confirmation_days + 5)
++    max_window = max(max(config.windows, default=90), required_history)
++    scan_anchor = end_date
++    trading_days = None
++    from .store import db as store_db
++    if use_local:
++        from .store.reader import latest_timestamp
++        with store_db.open_readonly_db(local_db_path) as conn:
++            codes = [stock["code"] for stock in stock_list]
++            boards = list({store_db.board_of(code) for code in codes})
++            latest = latest_timestamp(conn, boards, codes, end_date)
++            # An explicitly unavailable day is stale, not an earlier scan date.
++            if latest and latest[:10] == end_date:
++                scan_anchor = latest
++            trading_days = store_db.trading_days(conn, end=end_date) or None
++    elif Path(store_db.DB_PATH).is_file():
++        # Online daily quotes still need the known exchange calendar to detect
++        # suspended sessions; weekends/holidays are not missing trading bars.
++        with store_db.open_readonly_db() as conn:
++            trading_days = store_db.trading_days(conn, end=end_date) or None
+     calendar_days = (max_window * 2 if frequency == "d" else
+                      max(30, int(max_window * 7 / 4 * 1.5)))
+     start_date = (end_day - timedelta(days=calendar_days)
+@@ -254,6 +285,7 @@ def scan_stocks(stock_list: List[Dict[str, Any]],
+     empty_count = 0
+     error_count = 0
+     platform_count = 0
++    skip_counts = {"stale": 0, "gap": 0, "insufficient": 0}
+ 
+     # List to store platform stocks
+     platform_stocks = []
+@@ -300,28 +332,23 @@ def scan_stocks(stock_list: List[Dict[str, Any]],
+                 # Get K-line data
+                 df = future.result()
+ 
+-                if df.empty:
+-                    empty_count += 1
+-                    pbar.set_postfix(success=success_count, empty=empty_count,
+-                                     error=error_count, platform=platform_count)
+-                    pbar.update(1)
+-                    continue
+-
+-                if frequency == "60" and len(df) < max_window:
++                df, eligible_windows, skip_reason = prepare_scan_frame(
++                    df, config.windows, frequency, scan_anchor, trading_days,
++                    required_history=required_history)
++                if skip_reason:
++                    skip_counts[skip_reason] += 1
+                     empty_count += 1
+                     if update_progress:
+-                        update_progress(
+-                            scanned=i + 1, total=total_stocks,
+-                            found=platform_count,
+-                            message=f"{stock_code} 的60分钟K线不足 {max_window} 根（仅 {len(df)} 根），已跳过"
+-                        )
++                        labels = {"stale": "扫描时点无最新完整K线", "gap": "分析窗口存在行情缺口", "insufficient": "有效K线不足"}
++                        update_progress(scanned=i + 1, total=total_stocks, found=platform_count,
++                                        message=f"{stock_code}：{labels[skip_reason]}，已跳过")
+                     pbar.update(1)
+                     continue
+ 
+                 # Analyze for platform periods
+                 analysis_result = analyze_stock(
+                     df,
+-                    config.windows,
++                    eligible_windows,
+                     config.box_threshold,
+                     config.ma_diff_threshold,
+                     config.volatility_threshold,
+@@ -365,8 +392,7 @@ def scan_stocks(stock_list: List[Dict[str, Any]],
+                     # Add mark lines if available
+                     if "mark_lines" in analysis_result:
+                         platform_stock['mark_lines'] = analysis_result["mark_lines"]
+-                        print(
+-                            f"{Fore.GREEN}添加标记线数据到股票 {stock_code}: {analysis_result['mark_lines']}{Style.RESET_ALL}")
++
+ 
+                     # Add volume analysis results if available
+                     if config.use_volume_analysis and "volume_analysis" in analysis_result:
+@@ -382,12 +408,13 @@ def scan_stocks(stock_list: List[Dict[str, Any]],
+                         platform_stock['weight_details'] = analysis_result.get(
+                             "weight_details", {})
+ 
+-                    platform_stocks.append(platform_stock)
+-
+                     # 边扫边出：取消请求到达后不再追加新结果；当前 future
+                     # 仍允许完成，但最终结果只保留停止前已经发布的命中。
+                     if on_found and not (should_cancel and should_cancel()):
+-                        on_found(platform_stock)
++                        retained = on_found(platform_stock)
++                        if isinstance(retained, dict):
++                            platform_stock = retained
++                    platform_stocks.append(platform_stock)
+ 
+                 # Update progress
+                 if update_progress and i % 10 == 0:  # Update every 10 stocks
+@@ -496,7 +523,8 @@ def scan_stocks(stock_list: List[Dict[str, Any]],
+             message=(
+                 f"已停止：共分析 {success_count + empty_count + error_count} 只，发现 {platform_count} 只平台期股票，保留 {len(filtered_stocks)} 只"
+                 if cancelled else
+-                f"扫描完成：发现 {platform_count} 只平台期股票，保留 {len(filtered_stocks)} 只"
++                f"扫描完成：发现 {platform_count} 只平台期股票，保留 {len(filtered_stocks)} 只；"
++                f"跳过：过期 {skip_counts['stale']}、缺口 {skip_counts['gap']}、数据不足 {skip_counts['insufficient']}"
+             )
+         )
+ 

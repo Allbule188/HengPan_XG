@@ -1,0 +1,19 @@
+{
+  "windows": [
+    20,
+    30,
+    60,
+    90,
+    120
+  ],
+  "box_threshold": 0.1,
+  "ma_diff_threshold": 0.02,
+  "volatility_threshold": 0.02,
+  "box_quality_threshold": 0.8,
+  "scan_date": "2026-11-03",
+  "universe": 5389,
+  "matches": 213,
+  "matches_extended_05": 2,
+  "matches_extended_08": 13,
+  "matches_extended_09": 25
+}

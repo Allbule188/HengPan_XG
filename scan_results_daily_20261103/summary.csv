@@ -1,0 +1,18 @@
+﻿rule_id,label,kind,params,analyzed,passed_body,passed_full,gap,insufficient,stale
+tol_4_80,容刺 4% / 80根 / 4刺 / 连续1,tolerant,"{""box_height"": 0.04, ""lookback"": 80, ""max_breach"": 4, ""max_consecutive_breach"": 1}",5417,0,0,101,60,0
+fixed_4_80,定高 4% / 80根 / 越界2,fixed,"{""box_height"": 0.04, ""doji_amplitude"": 0.005, ""lookback"": 80, ""max_breach"": 2}",5417,0,0,101,60,0
+amp_1.0_80,振幅 x1.0 / 80根 / 越界2,amplitude,"{""amp_multiple"": 1.0, ""max_amplitude"": null, ""lookback"": 80, ""max_breach"": 2}",5417,44,30,101,60,0
+boll_20,布林矩形 BOLL30x2 / 最少80根 / 容差20%,boll,"{""boll_period"": 30, ""boll_multiplier"": 2.0, ""min_box_bars"": 80, ""rectangle_tolerance"": 0.2}",5339,47,47,164,75,0
+ma_1_30,均线走平 MA30 / 最少30根 / 1% / ER<=0.5,ma,"{""ma_period"": 30, ""min_flat_bars"": 30, ""ma_tolerance"": 0.01, ""max_efficiency_ratio"": 0.5}",5465,44,44,68,45,0
+tol_3_80,容刺 3% / 80根 / 3刺 / 连续1,tolerant,"{""box_height"": 0.03, ""lookback"": 80, ""max_breach"": 3, ""max_consecutive_breach"": 1}",5417,0,0,101,60,0
+tol_5_80,容刺 5% / 80根 / 5刺 / 连续1,tolerant,"{""box_height"": 0.05, ""lookback"": 80, ""max_breach"": 5, ""max_consecutive_breach"": 1}",5417,0,0,101,60,0
+tol_4_40,容刺 4% / 40根 / 4刺 / 连续1,tolerant,"{""box_height"": 0.04, ""lookback"": 40, ""max_breach"": 4, ""max_consecutive_breach"": 1}",5501,1,1,48,29,0
+fixed_6_40,定高 6% / 40根 / 越界2,fixed,"{""box_height"": 0.06, ""doji_amplitude"": 0.005, ""lookback"": 40, ""max_breach"": 2}",5498,12,2,49,31,0
+fixed_8_40,定高 8% / 40根 / 越界2,fixed,"{""box_height"": 0.08, ""doji_amplitude"": 0.005, ""lookback"": 40, ""max_breach"": 2}",5498,58,28,49,31,0
+fixed_10_40,定高 10% / 40根 / 越界2,fixed,"{""box_height"": 0.1, ""doji_amplitude"": 0.005, ""lookback"": 40, ""max_breach"": 2}",5498,137,75,49,31,0
+amp_0.8_80,振幅 x0.8 / 80根 / 越界2,amplitude,"{""amp_multiple"": 0.8, ""max_amplitude"": null, ""lookback"": 80, ""max_breach"": 2}",5417,24,17,101,60,0
+amp_1.2_80,振幅 x1.2 / 80根 / 越界2,amplitude,"{""amp_multiple"": 1.2, ""max_amplitude"": null, ""lookback"": 80, ""max_breach"": 2}",5417,70,46,101,60,0
+boll_10,布林矩形 BOLL30x2 / 最少80根 / 容差10%,boll,"{""boll_period"": 30, ""boll_multiplier"": 2.0, ""min_box_bars"": 80, ""rectangle_tolerance"": 0.1}",5339,3,3,164,75,0
+boll_30,布林矩形 BOLL30x2 / 最少80根 / 容差30%,boll,"{""boll_period"": 30, ""boll_multiplier"": 2.0, ""min_box_bars"": 80, ""rectangle_tolerance"": 0.3}",5339,186,186,164,75,0
+ma_1.5_30,均线走平 MA30 / 最少30根 / 1.5% / ER<=0.5,ma,"{""ma_period"": 30, ""min_flat_bars"": 30, ""ma_tolerance"": 0.015, ""max_efficiency_ratio"": 0.5}",5465,130,130,68,45,0
+ma_1_50_er0.3,均线走平 MA30 / 最少50根 / 1% / ER<=0.3,ma,"{""ma_period"": 30, ""min_flat_bars"": 50, ""ma_tolerance"": 0.01, ""max_efficiency_ratio"": 0.3}",5419,4,4,100,59,0
