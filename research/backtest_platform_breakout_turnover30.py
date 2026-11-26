@@ -120,7 +120,7 @@ def main():
     regime_map = dict(zip(idx_df["date"], idx_df["regime"]))
     idx_close_map = dict(zip(idx_df["date"], idx_df["close"]))
     idx_ma_map = dict(zip(idx_df["date"], idx_df["ma20"]))
-    shares_csv = sys.argv[4] if len(sys.argv) > 4 else "/Users/allbule/Developer/PythonProject/workplaces01/api/data/stock_circulating_shares.csv"
+    shares_csv = sys.argv[4] if len(sys.argv) > 4 else "/Users/allbule/Developer/PythonProject/workplaces01/data_workshop/data/reference/stock_circulating_shares.csv"
     shares_df = pd.read_csv(shares_csv, encoding="utf-8-sig", dtype={"code": str})
     shares_df["code"] = shares_df["code"].str.zfill(6)
     float_map = dict(zip(shares_df["code"], shares_df["circulating_shares"]))
